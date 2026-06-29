@@ -92,12 +92,42 @@ brazil-build cdk deploy PartnerDataInge-Beta
 
 ### References
 
-* Cradle profile / `sdlSchema` reference pipeline (DynamoDB stream → ANDES):
-  [WWCSBADataPipelineCDK/PromotionDetails](https://code.amazon.com/packages/WWCSBADataPipelineCDK/blobs/mainline/--/definitions/PromotionDetails/FEPromotionDetailsProfile/FEPromotionDetailsProfile.json)
-* SDL list-of-maps (`L` → list of `M`) reference:
-  [AgentStudioManagementServiceCDK](https://code.amazon.com/packages/AgentStudioManagementServiceCDK/blobs/mainline/--/lib/andes/cradle/backfill/agents/v1.template.json)
-* Reference implementation of this same pipeline + sample records:
+Reference pipelines (Maestro / Cradle definition-as-code structure):
+
+* Maestro pipeline package layout (definitions, andes, cradle profiles/jobs) reference:
+  [A11yScannerPlatformMaestroDataPipelineCDK](https://code.amazon.com/packages/A11yScannerPlatformMaestroDataPipelineCDK/trees/mainline)
+* Reference implementation of this same PartnerEntityMap pipeline + sample DDB-stream records:
   [KettleMetricsDataPipelineCDK (kettle-traffic-poc)](https://code.amazon.com/packages/KettleMetricsDataPipelineCDK/blobs/kettle-traffic-poc/--/definitions/PartnerEntityMap/PartnerEntityMap.sql)
-* Source DynamoDB record model:
-  [PartnerOrderingService PartnerEntityMapRecord](https://code.amazon.com/packages/PartnerOrderingService)
-* Maestro / Cradle docs: https://docs.hub.amazon.dev/ (BDT Maestro, Cradle, ANDES)
+  &nbsp;·&nbsp;[sample-ddb-streams-events.json](https://code.amazon.com/packages/KettleMetricsDataPipelineCDK/blobs/kettle-traffic-poc/--/poc-testdata/partner-entity-map/sample-ddb-streams-events.json)
+
+Cradle profile / `sdlSchema` (the "No such struct field OldImage" fix):
+
+* DynamoDB stream → ANDES profile with full `NewImage`/`OldImage` SDL:
+  [WWCSBADataPipelineCDK/PromotionDetails](https://code.amazon.com/packages/WWCSBADataPipelineCDK/blobs/mainline/--/definitions/PromotionDetails/FEPromotionDetailsProfile/FEPromotionDetailsProfile.json)
+* SDL list-of-maps (`L` → list of `M`) syntax for `lineItemMappings`:
+  [AgentStudioManagementServiceCDK](https://code.amazon.com/packages/AgentStudioManagementServiceCDK/blobs/mainline/--/lib/andes/cradle/backfill/agents/v1.template.json)
+  &nbsp;·&nbsp;[AMZFCashAppControllerMaestroCDK](https://code.amazon.com/packages/AMZFCashAppControllerMaestroCDK/blobs/mainline/--/definitions/cradle/Prod/CASH_BOOKINGS_DATA/CASH_BOOKINGS_DATA.json)
+* SDL `{base:list, element:{...}}` canonical syntax (parser test suite):
+  [AndesSparkUnescapedtsvDatasource SDLTest.scala](https://code.amazon.com/packages/AndesSparkUnescapedtsvDatasource/blobs/mainline/--/tst/com/amazon/spark/unescaped/tsv/util/SDLTest.scala)
+
+Source data (the camelCase attribute-name fix):
+
+* Source DynamoDB record model `PartnerEntityMapRecord` (confirms camelCase fields):
+  [PartnerOrderingService](https://code.amazon.com/packages/PartnerOrderingService)
+* Source table: DynamoDB `PartnerEntityMapTable`, account `091825117707`, `us-west-2`.
+* Source CDC S3 bucket: `partnerorderingservice-dd-ddbcdctos3cdcbucketd6bdb-jidbtxywubpf`.
+
+Platform docs:
+
+* Maestro / Cradle / ANDES: https://docs.hub.amazon.dev/
+* Brazil build system: https://docs.hub.amazon.dev/brazil/
+
+### Errors resolved during bring-up (beta)
+
+| Error | Root cause | Fix |
+|-------|-----------|-----|
+| `Cradle-InvalidSql: No such struct field OldImage` | Schema inferred from INSERT-only sample had no `OldImage` | Added explicit `sdlSchema` declaring both `NewImage` and `OldImage` |
+| `Cradle-FailedDataQualityCheck: __HIVE_DEFAULT_PARTITION__` | Null/empty `partner_id` partition key | Added `split(_raw_partner_order_id,'\\.')[0] <> ''` guard |
+| `Cradle-FailedDataQualityCheck: empty output dataset` | Wrong attribute casing (lowercase vs real camelCase) | Corrected all attribute names to camelCase in SQL + `sdlSchema` |
+
+Verified on beta: FE job run **Completed**; output landed in `gsx-expansion.O_PARTNER_ENTITY_MAP_beta` (v1).
